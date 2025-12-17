@@ -3,14 +3,35 @@ from pyspark.sql.functions import *
 import requests
 import json
 
+from pyspark.ml.recommendation import ALS
+from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.sql.types import *
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import numpy as np
 
-# crear sesion spark
-spark = SparkSession.builder.appName("Practica Final").getOrCreate()
+# Imports para Visualización (Rich)
+from rich.console import Console
+from rich.panel import Panel
+from rich.markdown import Markdown
+from rich.table import Table
+import os
+import sys
+import time
+# Imports para PDF (ReportLab)
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
+# crear sesion spark con MÁS MEMORIA
+spark = SparkSession.builder \
+    .appName("Practica Final") \
+    .config("spark.driver.memory", "8g") \
+    .config("spark.executor.memory", "8g") \
+    .config("spark.memory.offHeap.enabled", "true") \
+    .config("spark.memory.offHeap.size", "2g") \
+    .getOrCreate()
 
 # CARGA Y LIMPIEZA DE DATOS
 # cargar los datos con indicaciones para funcionar correctamente
@@ -382,41 +403,183 @@ plt.tight_layout()
 plt.show()
 
 # ALGORITMO ALS
-# Entrenamiento
-training, test = ratingsALS.randomSplit([0.8, 0.2])
-als = ALS(maxIter=10, regParam=0.1, userCol="userId", itemCol="itemId", ratingCol="rating", coldStartStrategy="drop")
-model = als.fit(training)
+# """
+# # Entrenamiento
+# training, test = ratingsALS.randomSplit([0.8, 0.2])
+# als = ALS(maxIter=10, regParam=0.1, userCol="userId", itemCol="itemId", ratingCol="rating", coldStartStrategy="drop")
+# model = als.fit(training)
 
-# Predicción
-predictions = model.transform(test)
-rmse = RegressionEvaluator(metricName="rmse", labelCol="rating", predictionCol="prediction").evaluate(predictions)
-print("RMSE =", rmse)
+# # Predicción
+# predictions = model.transform(test)
+# rmse = RegressionEvaluator(metricName="rmse", labelCol="rating", predictionCol="prediction").evaluate(predictions)
+# print("RMSE =", rmse)
 
-# Recomendaciones usuario 666666
-idUsuario = 666666
-user_df = spark.createDataFrame([(idUsuario,)], ["userId"])
-recs = model.recommendForUserSubset(user_df, 50)
-recs_final = recs.select(explode(col("recommendations")).alias("rec")).select(col("rec.itemId").alias("anime_id"), col("rec.rating").alias("predicted_rating")).join(animeCSV, col("anime_id") == animeCSV.ID, "inner").select(col("anime_id"), col("Name").alias("titulo_original"), col("English_name").alias("titulo_ingles"), col("Type"), col("valoracion_media")).filter(col("Type").isin("movie","tv")).orderBy(col("valoracion_media").desc())
+# # Recomendaciones usuario 666666
+# idUsuario = 666666
+# user_df = spark.createDataFrame([(idUsuario,)], ["userId"])
+# recs = model.recommendForUserSubset(user_df, 50)
+# recs_final = recs.select(explode(col("recommendations")).alias("rec")).select(col("rec.itemId").alias("anime_id"), col("rec.rating").alias("predicted_rating")).join(animeCSV, col("anime_id") == animeCSV.ID, "inner").select(col("anime_id"), col("Name").alias("titulo_original"), col("English_name").alias("titulo_ingles"), col("Type"), col("valoracion_media")).filter(col("Type").isin("movie","tv")).orderBy(col("valoracion_media").desc())
 
-# Guardar recomendaciones en .txt
-ruta_base = "/scripts/recomendaciones_usuario_666666"
-for tipo in ["movie", "tv"]:
-    ruta_tipo = f"{ruta_base}/{tipo}"
-    (
-        recs_final
-        .filter(col("Type") == tipo)
-        .limit(5)
-        .select(concat_ws(" | ", col("anime_id"), col("titulo_original"), col("titulo_ingles"), col("valoracion_media")).alias("value"))
-        .coalesce(1)
-        .write
-        .mode("overwrite")
-        .text(ruta_tipo)
-    )
+# # Guardar recomendaciones en .txt
+# ruta_base = "/scripts/recomendaciones_usuario_666666"
+# for tipo in ["movie", "tv"]:
+#     ruta_tipo = f"{ruta_base}/{tipo}"
+#     (
+#         recs_final
+#         .filter(col("Type") == tipo)
+#         .limit(5)
+#         .select(concat_ws(" | ", col("anime_id"), col("titulo_original"), col("titulo_ingles"), col("valoracion_media")).alias("value"))
+#         .coalesce(1)
+#         .write
+#         .mode("overwrite")
+#         .text(ruta_tipo)
+#     )
 
-# Renombrar el archivo .txt part-xxxxx.txt → recomendaciones.txt
-    for file in os.listdir(ruta_tipo):
-        if file.startswith("part-") and file.endswith(".txt"):
-            os.rename(os.path.join(ruta_tipo, file), os.path.join(ruta_tipo, "recomendaciones.txt"))
+# # Renombrar el archivo .txt part-xxxxx.txt → recomendaciones.txt
+#     for file in os.listdir(ruta_tipo):
+#         if file.startswith("part-") and file.endswith(".txt"):
+#             os.rename(os.path.join(ruta_tipo, file), os.path.join(ruta_tipo, "recomendaciones.txt"))
 
-print("Fin del Algoritmo")
+# print("Fin del Algoritmo")
+# """
 
+console = Console()
+
+# Definimos las rutas de entrada creadas por ALS y las de salida
+DIR_ENTRADA = "scripts/recomendaciones_usuario_666666"
+DIR_SALIDA = "recomendaciones_finales_666666"
+
+def obtener_info_api(anime_id):
+    url = f"https://api.jikan.moe/v4/anime/{anime_id}/full"
+    try:
+        time.sleep(1) # Respetar rate limit
+        resp = requests.get(url)
+        if resp.status_code == 200:
+            d = resp.json().get('data', {})
+            # Extraer trailer embed url
+            trailer_embed = d.get('trailer', {}).get('embed_url')
+            
+            return {
+                'id': anime_id,
+                'synopsis': d.get('synopsis', 'Sinopsis no disponible.'),
+                'image': d.get('images', {}).get('jpg', {}).get('image_url'),
+                'trailer': trailer_embed,
+                'year': d.get('year'),
+                'title': d.get('title'),
+                'url': d.get('url')
+            }
+        elif resp.status_code == 429:
+            time.sleep(2)
+            return obtener_info_api(anime_id)
+        return None
+    except Exception as e:
+        console.print(f"[red]Error API ID {anime_id}: {e}[/red]")
+        return None
+
+def generar_pdf(lista_datos, ruta_pdf, tipo_anime):
+    doc = SimpleDocTemplate(ruta_pdf, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph(f"Recomendaciones Finales: {tipo_anime.upper()}", styles['Title']))
+    story.append(Spacer(1, 12))
+
+    for item in lista_datos:
+        story.append(Paragraph(f"<b>{item['titulo_txt']}</b> (ID: {item['id']})", styles['Heading2']))
+        
+        if item['api_data']:
+            info = item['api_data']
+            texto_info = f"<b>Año:</b> {info['year']}<br/>"
+            texto_info += f"<b>Trailer:</b> {info['trailer'] if info['trailer'] else 'N/A'}<br/>"
+            texto_info += f"<b>Web:</b> {info['url']}<br/><br/>"
+            
+            # Limpiar sinopsis para PDF (quitar caracteres raros si los hay)
+            sinop_pdf = str(info['synopsis']).replace('\n', '<br/>')
+            texto_info += f"<b>Sinopsis:</b> {sinop_pdf}"
+            
+            story.append(Paragraph(texto_info, styles['Normal']))
+        else:
+            story.append(Paragraph("Sin datos de API.", styles['Normal']))
+        
+        story.append(Spacer(1, 24))
+        story.append(Paragraph("_" * 50, styles['Normal']))
+        story.append(Spacer(1, 12))
+
+    try:
+        doc.build(story)
+        console.print(f"[green]PDF generado: {ruta_pdf}[/green]")
+    except Exception as e:
+        console.print(f"[red]Error PDF: {e}[/red]")
+
+def procesar_categoria(categoria):
+    # Ruta de entrada (donde guardamos los txt del ALS)
+    path_txt_origen = os.path.join(DIR_ENTRADA, categoria, "recomendaciones.txt")
+    
+    # Rutas de salida
+    dir_destino = os.path.join(DIR_SALIDA, categoria)
+    if not os.path.exists(dir_destino):
+        os.makedirs(dir_destino)
+        
+    path_txt_destino = os.path.join(dir_destino, "recomendaciones.txt")
+    path_pdf_destino = os.path.join(dir_destino, "recomendaciones.pdf")
+
+    # Leer TXT origen
+    if os.path.exists(path_txt_origen):
+        with open(path_txt_origen, "r", encoding="utf-8") as f:
+            lineas_txt = f.readlines()
+            
+        console.print(f"\n[bold magenta]Procesando: {categoria.upper()}[/bold magenta]")
+        
+        # Copiar TXT a destino
+        with open(path_txt_destino, "w", encoding="utf-8") as f_out:
+            f_out.writelines(lineas_txt)
+
+        datos_procesados = []
+
+        # Consultar API y Rich
+        for linea in lineas_txt:
+            partes = linea.strip().split("|")
+            if len(partes) > 0:
+                anime_id = partes[0].strip()
+                titulo = partes[1].strip() if len(partes) > 1 else "Desconocido"
+                
+                console.print(f"[cyan]API ID {anime_id}: {titulo}...[/cyan]")
+                
+                api_data = obtener_info_api(anime_id)
+                
+                datos_procesados.append({
+                    "id": anime_id,
+                    "titulo_txt": titulo,
+                    "api_data": api_data
+                })
+
+                if api_data:
+                    grid = Table.grid(expand=True, padding=(0, 2))
+                    grid.add_column(ratio=1, style="yellow")
+                    grid.add_column(ratio=3)
+                    
+                    link_trailer = f"[red link={api_data['trailer']}]▶ TRAILER[/]" if api_data['trailer'] else "No Trailer"
+                    link_img = f"[blue link={api_data['image']}]🖼 IMAGEN[/]"
+                    
+                    synop = api_data['synopsis'][:200] + "..." if api_data['synopsis'] else "N/A"
+                    
+                    info_bloque = f"Año: {api_data['year']}\n{link_trailer} {link_img}"
+                    grid.add_row(info_bloque, Markdown(synop))
+                    
+                    console.print(Panel(grid, title=f"[bold white]{titulo}[/]", border_style="green"))
+
+        # Generar PDF
+        if datos_procesados:
+            generar_pdf(datos_procesados, path_pdf_destino, categoria)
+            
+    else:
+        console.print(f"[red]No encontrado: {path_txt_origen}[/red]")
+
+# MAIN
+if __name__ == "__main__":
+    
+    procesar_categoria("tv")
+    procesar_categoria("movie") #OJO AQUI CON EL NOMBRE DE LA CARPETA
+    
+    console.print(f"\n[bold white on green] FIN DEL PROCESO [/]")
+    spark.stop()
