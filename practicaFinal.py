@@ -330,7 +330,7 @@ typeRatingsScore = animeCSV.groupBy("Type").agg(avg("Score").alias("media_score"
 typeRatingsScore.show()
 print("Por valoracion media")
 
-typeRatingsValoracion = animeCSV.groupBy("Type").agg(avg("valoracion_media").alias("media_valoracion"),
+typeRatingsValoracion = animeCSV.groupBy("Type").agg(avg("valoracion_media").alias("media_valoracion"),)
 
 typeRatingsValoracion.show()
 
@@ -494,7 +494,7 @@ print("Fin del Algoritmo")
 # API
 console = Console()
 # Definimos las rutas de entrada creadas por ALS y las de salida
-BASE_DIR = os.path.dirname(os.path.abspath(_file_))  # Carpeta del script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Carpeta del script
 DIR_ENTRADA = "scripts/recomendaciones_usuario_666666"
 DIR_SALIDA = "recomendaciones_finales_666666"
 
@@ -636,18 +636,19 @@ def procesar_categoria(categoria_base):
         if datos_procesados:
             generar_pdf(datos_procesados, path_pdf_destino, categoria)
 
-       else:
-        console.print(f"[red]No encontrado: {path_txt_origen}[/red]")
-            
     else:
         console.print(f"[red]No encontrado: {path_txt_origen}[/red]")
+            
 
-# MAIN
-if __name__ == "__main__":
-    
-    procesar_categoria("tv")
-    procesar_categoria("movie") #OJO AQUI CON EL NOMBRE DE LA CARPETA
-    
-    console.print(f"\n[bold white on green] FIN DEL PROCESO [/]")
-    spark.stop()
+# Comprobar que existe las carpetas 
+print("BASE_DIR:", BASE_DIR)
+print("Existe tv:", os.path.exists(os.path.join(DIR_ENTRADA, "tv", "recomendaciones.txt")))
+print("Existe movie:", os.path.exists(os.path.join(DIR_ENTRADA, "movie", "recomendaciones.txt")))
+
+procesar_categoria("tv")
+procesar_categoria("movie")
+
+console.print(f"\n[bold white on green] FIN DEL PROCESO [/]")
+
+spark.stop()
 
