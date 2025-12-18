@@ -172,14 +172,16 @@ genreRatingsScore.show(10, truncate=False)
 genreRatingsValoracion = animeGenres.groupBy("genre").agg(avg("valoracion_media").alias("media_valoracion"),
                                                           count("*").alias("Numero de animes")).orderBy(
     col("media_valoracion").desc())
-print("Por valoracion media")
-genreRatingsValoracion.show(10, truncate=False)
+
+genreRatingsScore = animeGenres.groupBy("genre").agg(avg("Score").alias("media_score"), count("*").alias("Numero de animes")).orderBy(col("media_score").desc())
+print("Por Score")
+genreRatingsScore.show(10,truncate=False)
+
 
 print("\033[1m-FRECUENCIA DE ANIMES POR GÉNERO\033[0m")
-df_mediaScore = animeGenres.groupBy("genre").agg(avg("Score").alias("media_score")).orderBy(
-    col("media_score").desc()).toPandas()
+df_mediaScore = animeGenres.groupBy("genre").agg(avg("Score").alias("media_score")).orderBy(col("media_score").desc()).toPandas()
 print("Por Score")
-plt.figure(figsize=(10, 8))
+plt.figure(figsize=(10,8))
 plt.barh(df_mediaScore["genre"], df_mediaScore["media_score"])
 plt.title("Valoración media por género")
 plt.xlabel("Score medio")
@@ -191,12 +193,14 @@ df_mediaScore = animeGenres.groupBy("genre").agg(avg("valoracion_media").alias("
     col("media_valoracion").desc()).toPandas()
 print("Por valoracion media")
 plt.figure(figsize=(10, 8))
+
 plt.barh(df_mediaScore["genre"], df_mediaScore["media_valoracion"])
 plt.title("Valoración media por género")
 plt.xlabel("Valoracion media medio")
 plt.gca().invert_yaxis()
 plt.tight_layout()
 plt.show()
+
 
 # Estudios con mejor y peor nota media
 studioRatings = animeCSV.withColumn("studio", explode(split(col("Studios"), ", ")))
@@ -214,9 +218,24 @@ studioRatingsScore.show(10, truncate=False)
 print("Por valoracion media")
 studioRatingsValoracion.show(10, truncate=False)
 
+
+# Estudios con mejor y peor nota media
+studioRatings = animeCSV.withColumn("studio", explode(split(col("Studios"), ", ")))
+
+studioRatingsScore = studioRatings.groupBy("studio").agg(avg("Score").alias("media_score"), count("*").alias("Numero de animes")).orderBy(col("media_score").desc())
+studioRatingsValoracion = studioRatings.groupBy("studio").agg(avg("valoracion_media").alias("media_valoracion"), count("*").alias("Numero de animes")).orderBy(col("media_valoracion").desc())
+# mejor valoracion 
+print("\033[1m-ESTUDIOS CON MEJOR MEDIA\033[0m")
+print("Por Score")
+studioRatingsScore.show(10, truncate=False)  
+print("Por valoracion media")
+studioRatingsValoracion.show(10, truncate=False)  
+
+
 # peor valoracion
 print("\033[1m-ESTUDIOS CON PEOR MEDIA \033[0m")
 print("Por Score")
+
 studioRatingsScore.orderBy(col("media_score").asc()).show(10, truncate=False)
 print("Por valoracion media")
 studioRatingsValoracion.orderBy(col("media_valoracion").asc()).show(10, truncate=False)
@@ -226,6 +245,7 @@ studioRatingsValoracion.orderBy(col("media_valoracion").asc()).show(10, truncate
 print("\033[1m-HISTOGRAMA DE DISTRIBUCIÓN DE NOTAS\033[0m")
 print("Por Score")
 df = animeCSV.select("Score").toPandas()
+
 
 plt.figure(figsize=(8, 4))
 plt.hist(df["Score"], bins=20)
@@ -244,7 +264,6 @@ plt.xlabel("Valoración media")
 plt.ylabel("Frecuencia")
 plt.show()
 
-# Nota media general
 print("\033[1m-VALORACIONES MEDIAS\033[0m")
 print("Score:", media_score)
 print("Valoracion media:", media_valoracion)
@@ -257,8 +276,10 @@ moda.show(5)
 
 # por valoracion media
 print("Valoracion media")
+
 moda = animeCSV.groupBy("valoracion_media").agg(count("*").alias("frecuencia_valoracion_media")).orderBy(
     col("frecuencia_valoracion_media").desc())
+
 moda.show(5)
 
 # Comparación entre popularidad (número de miembros) y valoración para conocer si los más populares son los mejores
@@ -275,7 +296,9 @@ print("Grafico de popularidad y valoraciones")
 df_pop = animeCSV.select("Members", "Score", "valoracion_media").toPandas()
 
 # Crear rangos de popularidad (10 grupos)
+
 df_pop['Rango_popularidad'] = pd.qcut(df_pop['Members'], q=10)
+
 
 # Calcular el promedio de Score y valoración_media dentro de cada grupo
 mean_scores = df_pop.groupby('Rango_popularidad')[['Score', 'valoracion_media']].mean().reset_index()
@@ -284,10 +307,12 @@ mean_scores = df_pop.groupby('Rango_popularidad')[['Score', 'valoracion_media']]
 mean_scores['Rango_popularidad'] = mean_scores['Rango_popularidad'].astype(str)
 
 # Gráfico usando Seaborn
+
 plt.figure(figsize=(12, 6))
 sns.lineplot(x='Rango_popularidad', y='Score', data=mean_scores, marker='o', label="Score promedio")
 sns.lineplot(x='Rango_popularidad', y='valoracion_media', data=mean_scores, marker='o',
              label="Valoración media (usuarios)")
+
 
 plt.xticks(rotation=45)
 plt.title("Score vs Valoración Media según popularidad")
@@ -297,20 +322,23 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
+
 # Análisis por tipo (TV, Movie, OVA, etc)
 print("\033[1m-ANALISIS POR TYPE\033[0m")
 print("Por Score")
 typeRatingsScore = animeCSV.groupBy("Type").agg(avg("Score").alias("media_score"), count("*").alias("Numero de animes"))
 typeRatingsScore.show()
 print("Por valoracion media")
+
 typeRatingsValoracion = animeCSV.groupBy("Type").agg(avg("valoracion_media").alias("media_valoracion"),
-                                                     count("*").alias("Numero de animes"))
+
 typeRatingsValoracion.show()
 
 print("Grafico de animes por tipo")
 df = animeCSV.groupBy("Type").count().orderBy(col("count").desc()).toPandas()
 
 plt.figure(figsize=(8, 8))
+
 plt.barh(df["Type"], df["count"])
 plt.title("Frecuencia de animes por tipo")
 plt.xlabel("Número de animes")
@@ -330,6 +358,7 @@ print("Nota media usuario EP:", mediaEP)
 # Top géneros del usuario EP
 print("Gráfico del top de géneros del usuario")
 ratingsEP_genres = ratingsEP.join(animeGenres, ratingsEP.itemId == animeGenres.ID, "left")
+
 ratingsEP_genres.groupBy("genre").agg(avg("rating").alias("media_valoracion"),
                                       count("*").alias("num_valoraciones")).orderBy(
     col("media_valoracion").desc()).show(10)
@@ -340,6 +369,7 @@ df_usuario_EP = ratingsEP.join(animeGenres, ratingsEP.itemId == animeCSV.ID, "le
     avg("rating").alias("media_rating")).orderBy(col("media_rating").desc()).toPandas()
 
 plt.figure(figsize=(8, 8))
+
 plt.barh(df_usuario_EP["genre"], df_usuario_EP["media_rating"])
 plt.title("Géneros favoritos del usuario EP")
 plt.xlabel("Valoración media")
@@ -362,6 +392,7 @@ comparativa["diferencia"] = comparativa["media_usuario"] - comparativa["media_gl
 comparativa = comparativa.sort_values("diferencia", ascending=False)
 
 print("Comparativa de géneros favoritos: Usuario EP vs Media global")
+
 plt.figure(figsize=(10, 6))
 bar_width = 0.4
 x = np.arange(len(comparativa))
@@ -434,6 +465,7 @@ recs_final = recs.select(explode(col("recommendations")).alias("rec")).select(co
     col("anime_id"), col("Name").alias("titulo_original"), col("English_name").alias("titulo_ingles"), col("Type"),
     col("valoracion_media")).filter(col("Type").isin("movie", "tv")).orderBy(col("valoracion_media").desc())
 
+
 # Guardar recomendaciones en .txt
 ruta_base = "/scripts/recomendaciones_usuario_666666"
 for tipo in ["movie", "tv"]:
@@ -451,15 +483,16 @@ for tipo in ["movie", "tv"]:
     )
 
     # Renombrar el archivo .txt part-xxxxx.txt → recomendaciones.txt
+
     for file in os.listdir(ruta_tipo):
         if file.startswith("part-") and file.endswith(".txt"):
             os.rename(os.path.join(ruta_tipo, file), os.path.join(ruta_tipo, "recomendaciones.txt"))
 
 print("Fin del Algoritmo")
 
+
 # API
 console = Console()
-
 # Definimos las rutas de entrada creadas por ALS y las de salida
 BASE_DIR = os.path.dirname(os.path.abspath(_file_))  # Carpeta del script
 DIR_ENTRADA = "scripts/recomendaciones_usuario_666666"
@@ -475,7 +508,6 @@ def obtener_info_api(anime_id):
             d = resp.json().get('data', {})
             # Extraer trailer embed url
             trailer_embed = d.get('trailer', {}).get('embed_url')
-
             return {
                 'id': anime_id,
                 'synopsis': d.get('synopsis', 'Sinopsis no disponible.'),
@@ -493,7 +525,6 @@ def obtener_info_api(anime_id):
         console.print(f"[red]Error API ID {anime_id}: {e}[/red]")
         return None
 
-
 def generar_pdf(lista_datos, ruta_pdf, tipo_anime):
     doc = SimpleDocTemplate(ruta_pdf, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -504,7 +535,6 @@ def generar_pdf(lista_datos, ruta_pdf, tipo_anime):
 
     for item in lista_datos:
         story.append(Paragraph(f"<b>{item['titulo_txt']}</b> (ID: {item['id']})", styles['Heading2']))
-
         if item['api_data']:
             info = item['api_data']
             texto_info = f"<b>Año:</b> {info['year']}<br/>"
@@ -518,7 +548,6 @@ def generar_pdf(lista_datos, ruta_pdf, tipo_anime):
             story.append(Paragraph(texto_info, styles['Normal']))
         else:
             story.append(Paragraph("Sin datos de API.", styles['Normal']))
-
         story.append(Spacer(1, 24))
         story.append(Paragraph("_" * 50, styles['Normal']))
         story.append(Spacer(1, 12))
@@ -603,20 +632,22 @@ def procesar_categoria(categoria_base):
                     grid.add_row(info_bloque, Markdown(synop))
 
                     console.print(Panel(grid, title=f"[bold white]{titulo}[/]", border_style="green"))
-
         # Generar PDF
         if datos_procesados:
             generar_pdf(datos_procesados, path_pdf_destino, categoria)
 
+       else:
+        console.print(f"[red]No encontrado: {path_txt_origen}[/red]")
+            
     else:
         console.print(f"[red]No encontrado: {path_txt_origen}[/red]")
 
-
 # MAIN
 if __name__ == "__main__":
+    
     procesar_categoria("tv")
-    procesar_categoria("movie")  # OJO AQUI CON EL NOMBRE DE LA CARPETA
-
+    procesar_categoria("movie") #OJO AQUI CON EL NOMBRE DE LA CARPETA
+    
     console.print(f"\n[bold white on green] FIN DEL PROCESO [/]")
     spark.stop()
->> >> >> > upstream / main
+
